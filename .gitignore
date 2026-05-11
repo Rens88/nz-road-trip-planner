@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+dist/*.html
+!dist/.gitkeep
+personal_itineraries/*
+!personal_itineraries/.gitkeep
+.venv/

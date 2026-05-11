@@ -1,0 +1,326 @@
+{
+  "title": "New Zealand Road Trip",
+  "subtitle": "Draft itinerary variants",
+  "map": {
+    "center": [-41.25, 172.5],
+    "zoom": 6
+  },
+  "route_service": {
+    "url": "https://router.project-osrm.org/route/v1",
+    "profile": "driving"
+  },
+  "itineraries": [
+    {
+      "id": "north-to-south",
+      "name": "North to South",
+      "subtitle": "Auckland to Christchurch via both islands",
+      "stops": [
+        {
+          "name": "Auckland",
+          "date_range": "Option: Feb 02-04, 2027",
+          "lat": -36.8509,
+          "lon": 174.7645,
+          "notes": "Arrival, waterfront, Waiheke or city recovery day.",
+          "tag": "friends",
+          "meetups": ["Maya", "Liam"],
+          "route_note": "Start north island drive from Auckland."
+        },
+        {
+          "name": "Coromandel Peninsula",
+          "date_range": "Option: Feb 04-06, 2027",
+          "lat": -36.8283,
+          "lon": 175.7902,
+          "notes": "Cathedral Cove area, Hot Water Beach, coastal roads.",
+          "tag": "sightseeing",
+          "meetups": [],
+          "route_note": "Coastal and rural roads toward the geothermal belt."
+        },
+        {
+          "name": "Rotorua",
+          "date_range": "Option: Feb 06-08, 2027",
+          "lat": -38.1368,
+          "lon": 176.2497,
+          "notes": "Geothermal parks, lakes, Redwoods.",
+          "tag": "sightseeing",
+          "meetups": ["Anika"],
+          "route_note": "Drive south through the lake district toward Taupo."
+        },
+        {
+          "name": "Taupo",
+          "date_range": "Option: Feb 08-09, 2027",
+          "lat": -38.6857,
+          "lon": 176.0702,
+          "notes": "Lake Taupo, Huka Falls, base for Tongariro if weather works.",
+          "tag": "friends",
+          "meetups": ["Jess", "Tom"],
+          "route_note": "Short inland drive toward the volcanic plateau."
+        },
+        {
+          "name": "Tongariro National Park",
+          "date_range": "Option: Feb 09-11, 2027",
+          "lat": -39.2006,
+          "lon": 175.5809,
+          "notes": "Alpine crossing window, weather-dependent buffer.",
+          "tag": "tramping",
+          "meetups": [],
+          "route_note": "Continue south on State Highway 1 toward Wellington."
+        },
+        {
+          "name": "Wellington",
+          "date_range": "Option: Feb 11-13, 2027",
+          "lat": -41.2865,
+          "lon": 174.7762,
+          "notes": "Capital city, harbour, food, ferry staging.",
+          "tag": "friends",
+          "meetups": ["Priya"],
+          "route_note": "Interislander or Bluebridge ferry across Cook Strait."
+        },
+        {
+          "name": "Picton",
+          "date_range": "Option: Feb 13-14, 2027",
+          "lat": -41.2906,
+          "lon": 174.0010,
+          "notes": "Marlborough Sounds arrival and ferry buffer.",
+          "tag": "sightseeing",
+          "meetups": [],
+          "route_note": "Drive west toward Nelson and Abel Tasman."
+        },
+        {
+          "name": "Nelson / Abel Tasman",
+          "date_range": "Option: Feb 14-17, 2027",
+          "lat": -41.2706,
+          "lon": 173.2840,
+          "notes": "Coastal walks, beaches, kayak or water taxi day.",
+          "tag": "tramping",
+          "meetups": ["Eli", "Morgan"],
+          "route_note": "Cross toward the West Coast through inland valleys."
+        },
+        {
+          "name": "Punakaiki",
+          "date_range": "Option: Feb 17-18, 2027",
+          "lat": -42.1139,
+          "lon": 171.3263,
+          "notes": "Pancake Rocks and West Coast scenery.",
+          "tag": "sightseeing",
+          "meetups": [],
+          "route_note": "Follow the West Coast road south."
+        },
+        {
+          "name": "Franz Josef Glacier",
+          "date_range": "Option: Feb 18-20, 2027",
+          "lat": -43.3872,
+          "lon": 170.1830,
+          "notes": "Glacier valley walks, weather-dependent heli options.",
+          "tag": "sightseeing",
+          "meetups": [],
+          "route_note": "Continue south via Haast Pass toward Wanaka."
+        },
+        {
+          "name": "Wanaka",
+          "date_range": "Option: Feb 20-22, 2027",
+          "lat": -44.7032,
+          "lon": 169.1321,
+          "notes": "Lake Wanaka, Roys Peak area, slower scenic days.",
+          "tag": "tramping",
+          "meetups": ["Sophie"],
+          "route_note": "Short drive over the Crown Range or via Cromwell."
+        },
+        {
+          "name": "Queenstown",
+          "date_range": "Option: Feb 22-25, 2027",
+          "lat": -45.0312,
+          "lon": 168.6626,
+          "notes": "Adventure base, lakefront, Glenorchy day trip.",
+          "tag": "luxury-bach",
+          "meetups": ["Ben", "Grace"],
+          "route_note": "Drive south along Lake Wakatipu toward Fiordland."
+        },
+        {
+          "name": "Te Anau",
+          "date_range": "Option: Feb 25-27, 2027",
+          "lat": -45.4145,
+          "lon": 167.7181,
+          "notes": "Fiordland base for Milford Sound or Doubtful Sound.",
+          "tag": "camping",
+          "meetups": [],
+          "route_note": "Long inland drive back through Otago and Mackenzie Country."
+        },
+        {
+          "name": "Aoraki / Mount Cook",
+          "date_range": "Option: Feb 27-Mar 01, 2027",
+          "lat": -43.7340,
+          "lon": 170.0967,
+          "notes": "Hooker Valley Track, alpine views, clear-sky reserve.",
+          "tag": "tramping",
+          "meetups": [],
+          "route_note": "Final drive east to Christchurch."
+        },
+        {
+          "name": "Christchurch",
+          "date_range": "Option: Mar 01-03, 2027",
+          "lat": -43.5321,
+          "lon": 172.6362,
+          "notes": "Departure city, gardens, recovery day before flight.",
+          "tag": "friends",
+          "meetups": ["Chris"]
+        }
+      ]
+    },
+    {
+      "id": "south-to-north",
+      "name": "South to North",
+      "subtitle": "Christchurch to Auckland with South Island first",
+      "stops": [
+        {
+          "name": "Christchurch",
+          "date_range": "Option: Mar 03-05, 2027",
+          "lat": -43.5321,
+          "lon": 172.6362,
+          "notes": "Arrival city, gardens, supplies and jet lag buffer.",
+          "tag": "friends",
+          "meetups": ["Chris"],
+          "route_note": "Start inland toward Mackenzie Country."
+        },
+        {
+          "name": "Aoraki / Mount Cook",
+          "date_range": "Option: Mar 05-07, 2027",
+          "lat": -43.7340,
+          "lon": 170.0967,
+          "notes": "Hooker Valley Track, alpine views, clear-sky reserve.",
+          "tag": "tramping",
+          "meetups": [],
+          "route_note": "Drive south-west past lakes Tekapo and Pukaki."
+        },
+        {
+          "name": "Wanaka",
+          "date_range": "Option: Mar 07-09, 2027",
+          "lat": -44.7032,
+          "lon": 169.1321,
+          "notes": "Lake Wanaka, Roys Peak area, slower scenic days.",
+          "tag": "tramping",
+          "meetups": ["Sophie"],
+          "route_note": "Continue over the Crown Range or via Cromwell."
+        },
+        {
+          "name": "Queenstown",
+          "date_range": "Option: Mar 09-12, 2027",
+          "lat": -45.0312,
+          "lon": 168.6626,
+          "notes": "Adventure base, lakefront, Glenorchy day trip.",
+          "tag": "luxury-bach",
+          "meetups": ["Ben", "Grace"],
+          "route_note": "Drive south along Lake Wakatipu toward Fiordland."
+        },
+        {
+          "name": "Te Anau",
+          "date_range": "Option: Mar 12-14, 2027",
+          "lat": -45.4145,
+          "lon": 167.7181,
+          "notes": "Fiordland base for Milford Sound or Doubtful Sound.",
+          "tag": "camping",
+          "meetups": [],
+          "route_note": "Return north and cross Haast Pass toward the West Coast."
+        },
+        {
+          "name": "Franz Josef Glacier",
+          "date_range": "Option: Mar 14-16, 2027",
+          "lat": -43.3872,
+          "lon": 170.1830,
+          "notes": "Glacier valley walks, weather-dependent heli options.",
+          "tag": "sightseeing",
+          "meetups": [],
+          "route_note": "Follow the West Coast road north."
+        },
+        {
+          "name": "Punakaiki",
+          "date_range": "Option: Mar 16-17, 2027",
+          "lat": -42.1139,
+          "lon": 171.3263,
+          "notes": "Pancake Rocks and West Coast scenery.",
+          "tag": "sightseeing",
+          "meetups": [],
+          "route_note": "Cross inland toward Nelson."
+        },
+        {
+          "name": "Nelson / Abel Tasman",
+          "date_range": "Option: Mar 17-20, 2027",
+          "lat": -41.2706,
+          "lon": 173.2840,
+          "notes": "Coastal walks, beaches, kayak or water taxi day.",
+          "tag": "tramping",
+          "meetups": ["Eli", "Morgan"],
+          "route_note": "Drive east to Picton for the ferry."
+        },
+        {
+          "name": "Picton",
+          "date_range": "Option: Mar 20-21, 2027",
+          "lat": -41.2906,
+          "lon": 174.0010,
+          "notes": "Marlborough Sounds departure and ferry buffer.",
+          "tag": "sightseeing",
+          "meetups": [],
+          "route_note": "Ferry across Cook Strait to Wellington."
+        },
+        {
+          "name": "Wellington",
+          "date_range": "Option: Mar 21-23, 2027",
+          "lat": -41.2865,
+          "lon": 174.7762,
+          "notes": "Capital city, harbour, food, museum or recovery day.",
+          "tag": "friends",
+          "meetups": ["Priya"],
+          "route_note": "Drive north along State Highway 1."
+        },
+        {
+          "name": "Tongariro National Park",
+          "date_range": "Option: Mar 23-25, 2027",
+          "lat": -39.2006,
+          "lon": 175.5809,
+          "notes": "Alpine crossing window, weather-dependent buffer.",
+          "tag": "tramping",
+          "meetups": [],
+          "route_note": "Continue through the volcanic plateau."
+        },
+        {
+          "name": "Taupo",
+          "date_range": "Option: Mar 25-26, 2027",
+          "lat": -38.6857,
+          "lon": 176.0702,
+          "notes": "Lake Taupo, Huka Falls, easy reset night.",
+          "tag": "friends",
+          "meetups": ["Jess", "Tom"],
+          "route_note": "Short drive north toward Rotorua."
+        },
+        {
+          "name": "Rotorua",
+          "date_range": "Option: Mar 26-28, 2027",
+          "lat": -38.1368,
+          "lon": 176.2497,
+          "notes": "Geothermal parks, lakes, Redwoods.",
+          "tag": "sightseeing",
+          "meetups": ["Anika"],
+          "route_note": "Drive north-east toward the Coromandel coast."
+        },
+        {
+          "name": "Coromandel Peninsula",
+          "date_range": "Option: Mar 28-30, 2027",
+          "lat": -36.8283,
+          "lon": 175.7902,
+          "notes": "Cathedral Cove area, Hot Water Beach, coastal roads.",
+          "tag": "sightseeing",
+          "meetups": [],
+          "route_note": "Final coastal approach to Auckland."
+        },
+        {
+          "name": "Auckland",
+          "date_range": "Option: Mar 30-Apr 01, 2027",
+          "lat": -36.8509,
+          "lon": 174.7645,
+          "notes": "Departure city, waterfront, Waiheke or city recovery day.",
+          "tag": "friends",
+          "meetups": ["Maya", "Liam"]
+        }
+      ]
+    }
+  ]
+}

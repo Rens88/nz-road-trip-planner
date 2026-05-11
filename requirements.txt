@@ -1,0 +1,4 @@
+# No Python package dependencies are required.
+#
+# The generator uses only the Python standard library. The generated HTML loads
+# Leaflet, map tiles, and OSRM routing from public web services in the browser.
