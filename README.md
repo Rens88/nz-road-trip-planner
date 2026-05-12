@@ -26,22 +26,33 @@ For public repositories, keep real plans out of git:
 - Put private trip files in `personal_itineraries/`.
 - `personal_itineraries/*` is ignored by git, except for the placeholder `.gitkeep`.
 
-By default, the generator loads JSON files from `personal_itineraries/`. If that folder has no JSON files, it falls back to `example_itineraries/` and shows a notice in the app.
+By default, the generator loads one JSON file from `personal_itineraries/`. If that folder has no JSON file, it falls back to the single JSON file in `example_itineraries/` and shows a notice in the app. If a folder contains multiple JSON files, generation stops; put multiple route versions under `itineraries` in one trip file.
 
-Update your private JSON files with actual itinerary versions, stops, coordinates, dates, activity tags, meetup names, and notes, then rerun the generator.
+Update your private JSON file with actual itinerary versions, stops, coordinates, dates, activity tags, meetup names, and notes, then rerun the generator.
+
+Trip-level labels live at the top of the file:
+
+```json
+{
+  "supertitle": "Road trip",
+  "title": "NZ 2027",
+  "subtitle": "Family Trip, January-March 2027",
+  "itineraries": []
+}
+```
 
 The demo file contains two versions:
 
-- `North to South`
-- `South to North`
+- `N-S`
+- `S-N`
 
 Each version has its own `stops` list:
 
 ```json
 {
   "id": "north-to-south",
-  "name": "North to South",
-  "subtitle": "Auckland to Christchurch via both islands",
+  "version_name": "N-S",
+  "name": "Auckland to Christchurch via both islands",
   "stops": []
 }
 ```
@@ -55,7 +66,7 @@ Each stop supports:
   "lat": -38.1368,
   "lon": 176.2497,
   "notes": "Geothermal parks, lakes, Redwoods.",
-  "tag": "sightseeing",
+  "tags": ["sightseeing", "friends"],
   "meetups": ["Anika", "Jess"],
   "route_note": "Drive south through the Waikato and geothermal belt."
 }
@@ -63,7 +74,7 @@ Each stop supports:
 
 `route_note` describes the route from that stop to the next stop.
 `meetups` is optional and can contain zero, one, or multiple names.
-`tag` is optional and controls shared coloring for the activity type. Useful examples include `friends`, `tramping`, `sightseeing`, `camping`, `luxury-bach`, and `travel`.
+`tags` is required and must contain one or multiple activity types. The first tag controls the stop and route color; every tag gets an icon in the map marker and compact timeline. Useful examples include `friends`, `tramping`, `sightseeing`, `camping`, `luxury-bach`, and `travel`.
 
 Flight segments can be shown as dashed lines by adding flight metadata to the stop that starts the segment:
 
@@ -83,7 +94,7 @@ Flight segments can be shown as dashed lines by adding flight metadata to the st
 
 `flight_path` is optional. If omitted, the dashed segment is drawn directly between the current stop and the next stop.
 
-You can also explicitly generate from a file or folder:
+You can also explicitly generate from one file, or from a folder that contains exactly one JSON file:
 
 ```bash
 python3 scripts/generate_map.py --input personal_itineraries/my_trip.json

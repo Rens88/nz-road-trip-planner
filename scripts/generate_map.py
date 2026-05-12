@@ -26,28 +26,33 @@ def itinerary_files(folder: Path) -> list[Path]:
     return sorted(path for path in folder.glob("*.json") if path.is_file())
 
 
-def resolve_input_sources(path: Path | None) -> tuple[list[Path], bool]:
+def one_itinerary_file(folder: Path) -> Path:
+    files = itinerary_files(folder)
+    if not files:
+        raise FileNotFoundError(f"No JSON itinerary file found in {folder}")
+    if len(files) > 1:
+        labels = ", ".join(source_label(file) for file in files)
+        raise ValueError(
+            f"Expected one itinerary JSON file in {folder}, found {len(files)}: {labels}. "
+            "Put multiple itinerary versions inside one JSON file under 'itineraries'."
+        )
+    return files[0]
+
+
+def resolve_input_source(path: Path | None) -> tuple[Path, bool]:
     if path is not None:
         if path.is_dir():
-            files = itinerary_files(path)
-            if not files:
-                raise FileNotFoundError(f"No JSON itinerary files found in {path}")
-            return files, path.resolve() == EXAMPLE_ITINERARIES_DIR.resolve()
+            source = one_itinerary_file(path)
+            return source, path.resolve() == EXAMPLE_ITINERARIES_DIR.resolve()
         if not path.exists():
             raise FileNotFoundError(path)
-        return [path], path.parent.resolve() == EXAMPLE_ITINERARIES_DIR.resolve()
+        return path, path.parent.resolve() == EXAMPLE_ITINERARIES_DIR.resolve()
 
     personal_files = itinerary_files(PERSONAL_ITINERARIES_DIR)
     if personal_files:
-        return personal_files, False
+        return one_itinerary_file(PERSONAL_ITINERARIES_DIR), False
 
-    example_files = itinerary_files(EXAMPLE_ITINERARIES_DIR)
-    if not example_files:
-        raise FileNotFoundError(
-            f"No personal itineraries found in {PERSONAL_ITINERARIES_DIR}, "
-            f"and no example itineraries found in {EXAMPLE_ITINERARIES_DIR}."
-        )
-    return example_files, True
+    return one_itinerary_file(EXAMPLE_ITINERARIES_DIR), True
 
 
 def read_trip_file(path: Path) -> dict[str, Any]:
@@ -58,52 +63,11 @@ def read_trip_file(path: Path) -> dict[str, Any]:
     return trip
 
 
-def merge_trip_files(paths: list[Path]) -> dict[str, Any]:
-    if len(paths) == 1:
-        return read_trip_file(paths[0])
-
-    first = read_trip_file(paths[0])
-    merged: dict[str, Any] = {
-        "title": first.get("title", "New Zealand Road Trip"),
-        "subtitle": first.get("subtitle", "Combined itinerary files"),
-        "map": first.get("map", {}),
-        "route_service": first.get("route_service", {}),
-        "itineraries": [],
-    }
-
-    for path in paths:
-        trip = read_trip_file(path)
-        if isinstance(trip.get("itineraries"), list):
-            merged["itineraries"].extend(trip["itineraries"])
-        elif isinstance(trip.get("stops"), list):
-            merged["itineraries"].append(
-                {
-                    "id": path.stem,
-                    "name": trip.get("title", path.stem.replace("_", " ").title()),
-                    "subtitle": trip.get("subtitle", ""),
-                    "stops": trip["stops"],
-                }
-            )
-        else:
-            raise ValueError(f"{path} must contain either 'stops' or 'itineraries'.")
-
-    return merged
-
-
 def normalize_trip(trip: dict[str, Any]) -> dict[str, Any]:
-
-    if "itineraries" not in trip:
-        stops = trip.pop("stops", None)
-        if not isinstance(stops, list):
-            raise ValueError("The itinerary must contain either 'stops' or 'itineraries'.")
-        trip["itineraries"] = [
-            {
-                "id": "version-1",
-                "name": trip.get("title", "Version 1"),
-                "subtitle": trip.get("subtitle", ""),
-                "stops": stops,
-            }
-        ]
+    for key in ("supertitle", "title", "subtitle"):
+        if not str(trip.get(key, "")).strip():
+            raise ValueError(f"The trip must contain a non-empty '{key}' field.")
+        trip[key] = str(trip[key]).strip()
 
     itineraries = trip.get("itineraries")
     if not isinstance(itineraries, list) or not itineraries:
@@ -113,9 +77,10 @@ def normalize_trip(trip: dict[str, Any]) -> dict[str, Any]:
         if not isinstance(itinerary, dict):
             raise ValueError(f"Itinerary {itinerary_index} must be an object.")
 
-        itinerary.setdefault("id", f"version-{itinerary_index}")
-        itinerary.setdefault("name", f"Version {itinerary_index}")
-        itinerary.setdefault("subtitle", "")
+        for key in ("id", "version_name", "name"):
+            if not str(itinerary.get(key, "")).strip():
+                raise ValueError(f"Itinerary {itinerary_index} must contain a non-empty '{key}' field.")
+            itinerary[key] = str(itinerary[key]).strip()
 
         stops = itinerary.get("stops")
         if not isinstance(stops, list) or len(stops) < 2:
@@ -140,16 +105,24 @@ def normalize_trip(trip: dict[str, Any]) -> dict[str, Any]:
                 )
 
             meetups = stop.get("meetups", [])
-            if isinstance(meetups, str):
-                meetups = [meetups]
-            if meetups is None:
-                meetups = []
             if not isinstance(meetups, list):
                 raise ValueError(
                     f"Itinerary {itinerary_index}, stop {stop_index} has invalid 'meetups'; use a list of names."
                 )
             stop["meetups"] = [str(person) for person in meetups if str(person).strip()]
-            stop["tag"] = str(stop.get("tag", "sightseeing")).strip() or "sightseeing"
+
+            if "tag" in stop:
+                raise ValueError(
+                    f"Itinerary {itinerary_index}, stop {stop_index} uses legacy 'tag'; use 'tags' as a list."
+                )
+            tags = stop.get("tags")
+            if not isinstance(tags, list):
+                raise ValueError(
+                    f"Itinerary {itinerary_index}, stop {stop_index} must contain 'tags' as a list."
+                )
+            stop["tags"] = [str(tag).strip() for tag in tags if str(tag).strip()]
+            if not stop["tags"]:
+                raise ValueError(f"Itinerary {itinerary_index}, stop {stop_index} must contain at least one tag.")
 
             has_flight_fields = any(key in stop for key in ("flying_from", "flying_via", "flying_to", "flight_path"))
             if str(stop.get("transport_to_next", "")).strip().lower() == "flight" or has_flight_fields:
@@ -157,18 +130,12 @@ def normalize_trip(trip: dict[str, Any]) -> dict[str, Any]:
                 stop["flying_from"] = str(stop.get("flying_from", "")).strip()
                 stop["flying_to"] = str(stop.get("flying_to", "")).strip()
                 flying_via = stop.get("flying_via", [])
-                if isinstance(flying_via, str):
-                    flying_via = [flying_via]
-                if flying_via is None:
-                    flying_via = []
                 if not isinstance(flying_via, list):
                     raise ValueError(
                         f"Itinerary {itinerary_index}, stop {stop_index} has invalid 'flying_via'; use a list."
                     )
                 stop["flying_via"] = [str(place) for place in flying_via if str(place).strip()]
 
-    trip.setdefault("title", "Road Trip Map")
-    trip.setdefault("subtitle", "")
     trip.setdefault("map", {})
     trip.setdefault("route_service", {})
     trip["route_service"].setdefault("url", "https://router.project-osrm.org/route/v1")
@@ -177,10 +144,10 @@ def normalize_trip(trip: dict[str, Any]) -> dict[str, Any]:
 
 
 def load_trip(path: Path | None) -> dict[str, Any]:
-    sources, using_examples = resolve_input_sources(path)
-    trip = normalize_trip(merge_trip_files(sources))
+    source, using_examples = resolve_input_source(path)
+    trip = normalize_trip(read_trip_file(source))
     trip["using_example_itineraries"] = using_examples
-    trip["source_files"] = [source_label(source) for source in sources]
+    trip["source_file"] = source_label(source)
     return trip
 
 
@@ -194,12 +161,16 @@ def source_label(path: Path) -> str:
 
 def render_html(trip: dict[str, Any]) -> str:
     trip_json = json.dumps(trip, ensure_ascii=True, indent=2)
-    title = html.escape(str(trip.get("title", "Road Trip Map")), quote=True)
-    subtitle = html.escape(str(trip.get("subtitle", "")), quote=True)
+    supertitle = html.escape(str(trip["supertitle"]), quote=True)
+    title = html.escape(str(trip["title"]), quote=True)
+    subtitle = html.escape(str(trip["subtitle"]), quote=True)
+    document_title = title if not subtitle else f"{title} - {subtitle}"
 
     document = HTML_TEMPLATE
-    document = document.replace("__PAGE_TITLE__", title)
-    document = document.replace("__PAGE_SUBTITLE__", subtitle)
+    document = document.replace("__DOCUMENT_TITLE__", document_title)
+    document = document.replace("__TRIP_SUPERTITLE__", supertitle)
+    document = document.replace("__TRIP_TITLE__", title)
+    document = document.replace("__TRIP_SUBTITLE__", subtitle)
     document = document.replace("__TRIP_DATA__", trip_json)
     return document
 
@@ -211,8 +182,8 @@ def main() -> None:
         type=Path,
         default=None,
         help=(
-            "Path to an itinerary JSON file or folder. "
-            "Defaults to personal_itineraries/*.json, then example_itineraries/*.json."
+            "Path to one itinerary JSON file or to a folder containing exactly one JSON file. "
+            "Defaults to personal_itineraries, then example_itineraries."
         ),
     )
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT, help="Path to output HTML.")
@@ -229,7 +200,7 @@ HTML_TEMPLATE = """<!doctype html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>__PAGE_TITLE__</title>
+  <title>__DOCUMENT_TITLE__</title>
   <link
     rel="stylesheet"
     href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
@@ -618,6 +589,14 @@ HTML_TEMPLATE = """<!doctype html>
       line-height: 1.45;
     }
 
+    .selected-itinerary {
+      margin: 9px 0 0;
+      color: var(--ink);
+      font-size: 0.92rem;
+      font-weight: 800;
+      line-height: 1.3;
+    }
+
     .section-label {
       display: block;
       margin: 0 0 7px;
@@ -772,16 +751,71 @@ HTML_TEMPLATE = """<!doctype html>
       line-height: 1.35;
     }
 
-    .tag-pill {
-      display: inline-block;
+    .tag-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
       margin: 7px 0 0;
+    }
+
+    .tag-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
       padding: 3px 7px;
       border-radius: 999px;
       color: #ffffff;
-      background: var(--stop-color);
+      background: var(--tag-color, var(--stop-color));
       font-size: 0.72rem;
       font-weight: 800;
       line-height: 1.2;
+    }
+
+    .tag-icon-list {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      flex: 0 0 auto;
+    }
+
+    .tag-icon {
+      width: 16px;
+      height: 16px;
+      display: inline-grid;
+      place-items: center;
+      flex: 0 0 auto;
+      border-radius: 999px;
+      color: #ffffff;
+      background: var(--tag-color, var(--stop-color));
+      line-height: 1;
+    }
+
+    .tag-icon svg {
+      width: 11px;
+      height: 11px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 2.3;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .tag-pill .tag-icon {
+      width: 14px;
+      height: 14px;
+      background: rgba(255, 255, 255, 0.2);
+    }
+
+    .tag-pill .tag-icon svg {
+      width: 9px;
+      height: 9px;
+    }
+
+    .tag-icon-fallback {
+      font-size: 0.5rem;
+      font-weight: 900;
+      letter-spacing: 0;
+      line-height: 1;
     }
 
     .example-notice {
@@ -844,21 +878,62 @@ HTML_TEMPLATE = """<!doctype html>
     }
 
     .stop-marker {
-      width: 32px;
-      height: 32px;
+      overflow: visible;
+      color: #ffffff;
+      background: transparent;
+      border: 0;
+    }
+
+    .stop-marker-frame {
+      position: relative;
+      width: var(--marker-size, 32px);
+      height: var(--marker-size, 32px);
+      display: block;
+    }
+
+    .stop-marker-core {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: var(--marker-size, 32px);
+      height: var(--marker-size, 32px);
       display: grid;
       place-items: center;
       border: 3px solid #ffffff;
       border-radius: 999px;
-      color: #ffffff;
       background: var(--stop-color, #315f9f);
       box-shadow: 0 5px 16px rgba(18, 25, 38, 0.30);
-      font-size: 0.82rem;
+      font-size: var(--marker-font-size, 0.82rem);
       font-weight: 900;
     }
 
-    .stop-marker span {
+    .stop-marker-number {
       transform: translateY(-1px);
+    }
+
+    .stop-marker-tags {
+      position: absolute;
+      top: 50%;
+      left: calc(var(--marker-size, 32px) - 2px);
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      padding: 2px;
+      transform: translateY(-50%);
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.94);
+      box-shadow: 0 4px 12px rgba(18, 25, 38, 0.20);
+    }
+
+    .stop-marker-tags .tag-icon {
+      width: 14px;
+      height: 14px;
+    }
+
+    .stop-marker-tags .tag-icon svg {
+      width: 9px;
+      height: 9px;
+      stroke-width: 2.6;
     }
 
     .stop-tooltip,
@@ -1070,36 +1145,107 @@ HTML_TEMPLATE = """<!doctype html>
       line-height: 1.35;
     }
 
+    .timeline-summary {
+      display: none;
+    }
+
+    .timeline-view[data-scale="0"] .timeline-track {
+      min-height: 0;
+      padding: 0 2px 16px;
+    }
+
+    .timeline-view[data-scale="0"] .timeline-axis-layout {
+      grid-template-columns: 76px minmax(0, 1fr);
+      gap: 12px;
+    }
+
+    .timeline-view[data-scale="0"] .timeline-axis {
+      border-right-width: 1px;
+    }
+
+    .timeline-view[data-scale="0"] .timeline-date-mark {
+      right: 8px;
+      font-size: 0.58rem;
+    }
+
+    .timeline-view[data-scale="0"] .timeline-date-mark::after {
+      right: -10px;
+      width: 5px;
+    }
+
     .timeline-view[data-scale="0"] .timeline-stop {
-      display: grid;
-      grid-template-columns: minmax(120px, 1fr) auto;
-      gap: 8px;
+      display: flex;
       align-items: center;
-      padding: 4px 10px;
-      box-shadow: 0 4px 12px rgba(18, 25, 38, 0.06);
+      width: min(760px, 100%);
+      min-height: 16px;
+      padding: 0 6px;
+      border: 0;
+      border-left: 4px solid var(--stop-color);
+      border-radius: 3px;
+      background: var(--stop-bg);
+      box-shadow: none;
+      line-height: 1;
+      overflow: visible;
     }
 
-    .timeline-view[data-scale="0"] .timeline-stop h3 {
-      font-size: 0.84rem;
-      white-space: nowrap;
+    .timeline-view[data-scale="0"] .timeline-dot {
+      top: 50%;
+      left: -33px;
+      width: 18px;
+      height: 18px;
+      transform: translateY(-50%);
+      border-width: 2px;
+      box-shadow: none;
+      font-size: 0.62rem;
+    }
+
+    .timeline-view[data-scale="0"] .timeline-summary {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      width: 100%;
+      min-width: 0;
+    }
+
+    .timeline-place {
+      min-width: 0;
       overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
-    .timeline-view[data-scale="0"] .timeline-date {
-      margin: 0;
+      color: var(--ink);
       font-size: 0.72rem;
-      text-align: right;
+      font-weight: 850;
+      line-height: 1.15;
+      text-overflow: ellipsis;
       white-space: nowrap;
     }
 
-    .timeline-view[data-scale="1"] .timeline-note {
+    .timeline-summary-date {
+      margin-left: auto;
+      color: var(--accent-3);
+      font-size: 0.66rem;
+      font-weight: 800;
+      line-height: 1.15;
+      white-space: nowrap;
+    }
+
+    .timeline-view[data-scale="0"] .timeline-summary .tag-icon {
+      width: 14px;
+      height: 14px;
+    }
+
+    .timeline-view[data-scale="0"] .timeline-summary .tag-icon svg {
+      width: 9px;
+      height: 9px;
+    }
+
+    .timeline-view[data-scale="0"] .timeline-stop > h3,
+    .timeline-view[data-scale="0"] .timeline-stop > .timeline-date {
+      margin: 0;
       display: none;
     }
 
     .timeline-view[data-scale="0"] .meetups,
     .timeline-view[data-scale="0"] .timeline-note,
-    .timeline-view[data-scale="0"] .tag-pill,
+    .timeline-view[data-scale="0"] .tag-list,
     .timeline-view[data-scale="0"] .flight-info {
       display: none;
     }
@@ -1183,24 +1329,38 @@ HTML_TEMPLATE = """<!doctype html>
       .timeline-dot {
         left: -40px;
       }
+
+      .timeline-view[data-scale="0"] .timeline-axis-layout {
+        grid-template-columns: 62px minmax(0, 1fr);
+        gap: 10px;
+      }
+
+      .timeline-view[data-scale="0"] .timeline-dot {
+        left: -28px;
+      }
+
+      .timeline-summary-date {
+        font-size: 0.6rem;
+      }
     }
   </style>
 </head>
 <body>
   <div id="app">
-    <div id="map" aria-label="__PAGE_TITLE__"></div>
+    <div id="map" aria-label="__TRIP_TITLE__"></div>
     <aside class="panel" id="panel">
       <header>
-        <p class="eyebrow">Road trip</p>
-        <h1 id="panelTitle">__PAGE_TITLE__</h1>
-        <p class="subtitle" id="panelSubtitle">__PAGE_SUBTITLE__</p>
+        <p class="eyebrow" id="panelSupertitle">__TRIP_SUPERTITLE__</p>
+        <h1 id="panelTitle">__TRIP_TITLE__</h1>
+        <p class="subtitle" id="panelSubtitle">__TRIP_SUBTITLE__</p>
       </header>
       <section aria-label="Itinerary versions">
         <span class="section-label">Version</span>
         <div class="version-tabs" id="versionTabs"></div>
+        <p class="selected-itinerary" id="selectedItineraryName"></p>
       </section>
       <div class="example-notice" id="exampleNotice" hidden>
-        Example itineraries are shown. Add your own JSON files to personal_itineraries/ and rerun the generator.
+        The example itinerary file is shown. Add your own JSON file to personal_itineraries/ and rerun the generator.
       </div>
       <section class="stats" aria-label="Trip totals">
         <div class="stat"><span>Stops</span><strong id="stopCount">-</strong></div>
@@ -1214,19 +1374,20 @@ HTML_TEMPLATE = """<!doctype html>
       <div class="timeline-shell">
         <header class="timeline-header">
           <div>
-            <p class="eyebrow">Timeline</p>
-            <h2 id="timelineTitle">__PAGE_TITLE__</h2>
-            <p id="timelineSubtitle">__PAGE_SUBTITLE__</p>
+            <p class="eyebrow" id="timelineSupertitle">__TRIP_SUPERTITLE__</p>
+            <h2 id="timelineTitle">__TRIP_TITLE__</h2>
+            <p id="timelineSubtitle">__TRIP_SUBTITLE__</p>
             <div class="example-notice" id="timelineExampleNotice" hidden>
-              Example itineraries are shown. Add your own JSON files to personal_itineraries/ and rerun the generator.
+              The example itinerary file is shown. Add your own JSON file to personal_itineraries/ and rerun the generator.
             </div>
           </div>
           <div class="timeline-controls">
             <span class="section-label">Version</span>
             <div class="version-tabs" id="timelineVersionTabs"></div>
+            <p class="selected-itinerary" id="timelineItineraryName"></p>
             <div class="timeline-scale">
               <span class="section-label">Scale</span>
-              <input id="timelineScale" type="range" min="0" max="2" step="1" value="0" aria-label="Timeline scale">
+              <input id="timelineScale" type="range" min="0" max="1" step="1" value="0" aria-label="Timeline scale">
               <div class="timeline-scale-labels">
                 <span>Compact</span>
                 <span>Detailed</span>
@@ -1267,10 +1428,17 @@ HTML_TEMPLATE = """<!doctype html>
       "luxury-bach": "#6f5a9c",
       travel: "#4f5d70"
     };
+    const tagIcons = {
+      friends: "friends",
+      tramping: "mountain",
+      sightseeing: "camera",
+      camping: "tent",
+      "luxury-bach": "home",
+      travel: "route"
+    };
     const timelineScales = [
-      { pxPerDay: 52 },
-      { pxPerDay: 96 },
-      { pxPerDay: 148 }
+      { pxPerDay: 18, minHeight: 120 },
+      { pxPerDay: 148, minHeight: 320 }
     ];
     const monthLookup = {
       jan: 0,
@@ -1340,14 +1508,7 @@ HTML_TEMPLATE = """<!doctype html>
       collapsed: true
     }).addTo(map);
 
-    const itineraries = Array.isArray(trip.itineraries) && trip.itineraries.length
-      ? trip.itineraries
-      : [{
-        id: "version-1",
-        name: trip.title || "Version 1",
-        subtitle: trip.subtitle || "",
-        stops: trip.stops || []
-      }];
+    const itineraries = trip.itineraries;
     const routeCache = new Map();
     let activeItineraryIndex = 0;
     let activeRouteRun = 0;
@@ -1355,12 +1516,16 @@ HTML_TEMPLATE = """<!doctype html>
     let markers = [];
 
     const app = document.getElementById("app");
+    const panelSupertitle = document.getElementById("panelSupertitle");
     const panelTitle = document.getElementById("panelTitle");
     const panelSubtitle = document.getElementById("panelSubtitle");
+    const selectedItineraryName = document.getElementById("selectedItineraryName");
     const versionTabs = document.getElementById("versionTabs");
     const timelineVersionTabs = document.getElementById("timelineVersionTabs");
+    const timelineSupertitle = document.getElementById("timelineSupertitle");
     const timelineTitle = document.getElementById("timelineTitle");
     const timelineSubtitle = document.getElementById("timelineSubtitle");
+    const timelineItineraryName = document.getElementById("timelineItineraryName");
     const exampleNotice = document.getElementById("exampleNotice");
     const timelineExampleNotice = document.getElementById("timelineExampleNotice");
     const timelineTrack = document.getElementById("timelineTrack");
@@ -1379,11 +1544,11 @@ HTML_TEMPLATE = """<!doctype html>
     timelineScale.addEventListener("input", () => renderTimeline(getActiveItinerary()));
     exampleNotice.hidden = !trip.using_example_itineraries;
     timelineExampleNotice.hidden = !trip.using_example_itineraries;
-    window.addEventListener("load", refreshMapLayout);
+    window.addEventListener("load", () => refreshMapLayout());
     window.addEventListener("resize", () => map.invalidateSize({ animate: false }));
 
     renderVersionTabs();
-    renderActiveItinerary();
+    renderActiveItinerary({ fitBounds: true });
     setViewMode("map");
 
     function getActiveItinerary() {
@@ -1397,7 +1562,8 @@ HTML_TEMPLATE = """<!doctype html>
           const button = document.createElement("button");
           button.type = "button";
           button.className = `version-button${index === activeItineraryIndex ? " is-active" : ""}`;
-          button.textContent = itinerary.name || `Version ${index + 1}`;
+          button.textContent = itinerary.version_name;
+          button.setAttribute("aria-label", `${itinerary.version_name}: ${itinerary.name}`);
           button.setAttribute("aria-pressed", String(index === activeItineraryIndex));
           button.addEventListener("click", () => {
             activeItineraryIndex = index;
@@ -1409,9 +1575,10 @@ HTML_TEMPLATE = """<!doctype html>
       });
     }
 
-    function renderActiveItinerary() {
+    function renderActiveItinerary(options = {}) {
       const itinerary = getActiveItinerary();
       const stops = itinerary.stops || [];
+      const fitBounds = Boolean(options.fitBounds);
       activeRouteRun += 1;
       activeBounds = L.latLngBounds([]);
       markers = [];
@@ -1421,10 +1588,14 @@ HTML_TEMPLATE = """<!doctype html>
       stopList.innerHTML = "";
       map.closePopup();
 
-      panelTitle.textContent = trip.title || "Road Trip Map";
-      panelSubtitle.textContent = itinerary.subtitle || trip.subtitle || itinerary.name || "";
-      timelineTitle.textContent = itinerary.name || trip.title || "Timeline";
-      timelineSubtitle.textContent = itinerary.subtitle || trip.subtitle || "";
+      panelSupertitle.textContent = trip.supertitle;
+      panelTitle.textContent = trip.title;
+      panelSubtitle.textContent = trip.subtitle;
+      selectedItineraryName.textContent = itinerary.name;
+      timelineSupertitle.textContent = trip.supertitle;
+      timelineTitle.textContent = trip.title;
+      timelineSubtitle.textContent = trip.subtitle;
+      timelineItineraryName.textContent = itinerary.name;
       stopCount.textContent = String(stops.length);
       distanceTotal.textContent = "Routing";
       durationTotal.textContent = "Routing";
@@ -1432,8 +1603,7 @@ HTML_TEMPLATE = """<!doctype html>
 
       stops.forEach((stop, index) => renderStop(stop, index));
       renderTimeline(itinerary);
-      fitTripBounds();
-      requestAnimationFrame(refreshMapLayout);
+      requestAnimationFrame(() => refreshMapLayout({ fitBounds }));
 
       if (stops.length > 1) {
         drawRoutes(itinerary, activeRouteRun);
@@ -1443,22 +1613,34 @@ HTML_TEMPLATE = """<!doctype html>
     function renderStop(stop, index) {
       const latLng = [stop.lat, stop.lon];
       const color = stopColor(stop);
+      const range = parseDateRange(stop.date_range);
+      const markerMetrics = markerMetricsForDays(range.durationDays);
+      const markerTags = stopTags(stop);
       activeBounds.extend(latLng);
 
       const marker = L.marker(latLng, {
         title: stop.name,
         icon: L.divIcon({
           className: "stop-marker",
-          html: `<span>${index + 1}</span>`,
-          iconSize: [32, 32],
-          iconAnchor: [16, 16],
-          popupAnchor: [0, -16]
+          html: `
+            <span class="stop-marker-frame">
+              <span class="stop-marker-core">
+                <span class="stop-marker-number">${index + 1}</span>
+              </span>
+              <span class="stop-marker-tags">${markerTags.map(tagIconHTML).join("")}</span>
+            </span>
+          `,
+          iconSize: [markerMetrics.size, markerMetrics.size],
+          iconAnchor: [markerMetrics.size / 2, markerMetrics.size / 2],
+          popupAnchor: [0, -markerMetrics.size / 2]
         })
       }).addTo(stopLayer);
 
       const markerElement = marker.getElement();
       if (markerElement) {
         markerElement.style.setProperty("--stop-color", color);
+        markerElement.style.setProperty("--marker-size", `${markerMetrics.size}px`);
+        markerElement.style.setProperty("--marker-font-size", markerMetrics.fontSize);
       }
 
       marker.bindTooltip(stopTooltip(stop), {
@@ -1529,7 +1711,7 @@ HTML_TEMPLATE = """<!doctype html>
         boundaryDates.add(dateKey(item.range.end));
       });
       const timelineDays = timelineStart && timelineEnd ? Math.max(1, daysBetween(timelineStart, timelineEnd)) : 1;
-      const timelineHeight = Math.max(320, timelineDays * scale.pxPerDay);
+      const timelineHeight = Math.max(scale.minHeight || 320, timelineDays * scale.pxPerDay);
       const marks = timelineStart && timelineEnd
         ? dateTicks(timelineStart, timelineEnd).map((date) => ({
           top: daysBetween(timelineStart, date) * scale.pxPerDay,
@@ -1554,9 +1736,15 @@ HTML_TEMPLATE = """<!doctype html>
                 ? daysBetween(timelineStart, item.range.start) * scale.pxPerDay
                 : item.index * scale.pxPerDay;
               const height = Math.max(scale.pxPerDay, item.range.durationDays * scale.pxPerDay);
+              const color = stopColor(item.stop);
               return `
-              <article class="timeline-stop" style="--stop-color: ${stopColor(item.stop)}; top: ${top}px; height: ${height}px">
+              <article class="timeline-stop" style="--stop-color: ${color}; --stop-bg: ${colorWithAlpha(color, 0.16)}; top: ${top}px; height: ${height}px">
                 <span class="timeline-dot">${item.index + 1}</span>
+                <div class="timeline-summary">
+                  <span class="timeline-place">${escapeHTML(item.stop.name)}</span>
+                  ${tagIconsHTML(item.stop)}
+                  <span class="timeline-summary-date">${escapeHTML(item.range.label || item.stop.date_range)}</span>
+                </div>
                 <h3>${escapeHTML(item.stop.name)}</h3>
                 <p class="timeline-date">${escapeHTML(item.range.label || item.stop.date_range)}</p>
                 ${tagHTML(item.stop)}
@@ -1579,7 +1767,7 @@ HTML_TEMPLATE = """<!doctype html>
       mapViewButton.setAttribute("aria-pressed", String(!showTimeline));
       timelineViewButton.setAttribute("aria-pressed", String(showTimeline));
       if (!showTimeline) {
-        requestAnimationFrame(refreshMapLayout);
+        requestAnimationFrame(() => refreshMapLayout());
       }
     }
 
@@ -1727,9 +1915,11 @@ HTML_TEMPLATE = """<!doctype html>
       });
     }
 
-    function refreshMapLayout() {
+    function refreshMapLayout(options = {}) {
       map.invalidateSize({ animate: false });
-      fitTripBounds();
+      if (options.fitBounds) {
+        fitTripBounds();
+      }
     }
 
     function fitTripBounds() {
@@ -1787,8 +1977,12 @@ HTML_TEMPLATE = """<!doctype html>
     }
 
     function stopColor(stop) {
-      const tag = normalizeTag(stop?.tag);
-      return tagColors[tag] || segmentColors[hashString(tag) % segmentColors.length];
+      return tagColor(stopTags(stop)[0]);
+    }
+
+    function tagColor(tag) {
+      const normalized = normalizeTag(tag);
+      return tagColors[normalized] || segmentColors[hashString(normalized) % segmentColors.length];
     }
 
     function normalizeTag(tag) {
@@ -1799,12 +1993,87 @@ HTML_TEMPLATE = """<!doctype html>
         .replace(/^-+|-+$/g, "") || "sightseeing";
     }
 
-    function tagLabel(stop) {
-      return normalizeTag(stop?.tag);
+    function stopTags(stop) {
+      const tags = stop.tags
+        .map((tag) => normalizeTag(tag))
+        .filter(Boolean);
+      return [...new Set(tags)];
+    }
+
+    function tagIconsHTML(stop) {
+      return `<span class="tag-icon-list">${stopTags(stop).map(tagIconHTML).join("")}</span>`;
+    }
+
+    function tagIconHTML(tag) {
+      const normalized = normalizeTag(tag);
+      return `
+        <span class="tag-icon" style="--tag-color: ${tagColor(normalized)}" title="${escapeHTML(normalized)}" aria-label="${escapeHTML(normalized)}">
+          ${tagIconGraphic(tagIcons[normalized] || "fallback", normalized)}
+        </span>
+      `;
     }
 
     function tagHTML(stop) {
-      return `<p class="tag-pill" style="--stop-color: ${stopColor(stop)}">${escapeHTML(tagLabel(stop))}</p>`;
+      return `
+        <p class="tag-list">
+          ${stopTags(stop).map((tag) => `
+            <span class="tag-pill" style="--tag-color: ${tagColor(tag)}">
+              ${tagIconHTML(tag)}
+              <span>${escapeHTML(tag)}</span>
+            </span>
+          `).join("")}
+        </p>
+      `;
+    }
+
+    function tagIconGraphic(icon, tag) {
+      if (icon === "friends") {
+        return svgIcon('<path d="M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z"></path><path d="M17 10a3 3 0 1 0 0-6"></path><path d="M3 21v-2a6 6 0 0 1 12 0v2"></path><path d="M15 21v-2a5 5 0 0 0-2-4"></path><path d="M18 21v-2a5 5 0 0 0-3-4"></path>');
+      }
+      if (icon === "mountain") {
+        return svgIcon('<path d="M3 20h18L14 6l-4 8-2-3-5 9Z"></path><path d="M14 6l-2 6h5"></path>');
+      }
+      if (icon === "camera") {
+        return svgIcon('<path d="M4 8h4l2-3h4l2 3h4v11H4V8Z"></path><circle cx="12" cy="14" r="3"></circle>');
+      }
+      if (icon === "tent") {
+        return svgIcon('<path d="M3 20 12 4l9 16H3Z"></path><path d="M12 4v16"></path><path d="M12 20l4-7"></path>');
+      }
+      if (icon === "home") {
+        return svgIcon('<path d="M4 11 12 4l8 7v9H4v-9Z"></path><path d="M9 20v-6h6v6"></path><path d="M17 5l.6 1.4L19 7l-1.4.6L17 9l-.6-1.4L15 7l1.4-.6L17 5Z"></path>');
+      }
+      if (icon === "route") {
+        return svgIcon('<path d="M5 19c6-7 8 1 14-6"></path><circle cx="5" cy="19" r="2"></circle><circle cx="19" cy="13" r="2"></circle><path d="M9 5h6"></path><path d="m13 3 2 2-2 2"></path>');
+      }
+      return `<span class="tag-icon-fallback" aria-hidden="true">${escapeHTML(tag.slice(0, 2).toUpperCase())}</span>`;
+    }
+
+    function svgIcon(paths) {
+      return `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">${paths}</svg>`;
+    }
+
+    function markerMetricsForDays(days) {
+      const safeDays = Math.max(1, Number(days) || 1);
+      const weight = Math.log2(safeDays);
+      return {
+        size: Math.round(clamp(30 + weight * 7, 30, 58)),
+        fontSize: `${clamp(12 + weight * 2.4, 12, 20).toFixed(1)}px`
+      };
+    }
+
+    function clamp(value, min, max) {
+      return Math.min(max, Math.max(min, value));
+    }
+
+    function colorWithAlpha(color, alpha) {
+      const hex = String(color || "").replace("#", "");
+      if (!/^[0-9a-f]{6}$/i.test(hex)) {
+        return `rgba(0, 122, 120, ${alpha})`;
+      }
+      const red = parseInt(hex.slice(0, 2), 16);
+      const green = parseInt(hex.slice(2, 4), 16);
+      const blue = parseInt(hex.slice(4, 6), 16);
+      return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
     }
 
     function isFlightSegment(stop) {
