@@ -69,6 +69,26 @@ def normalize_trip(trip: dict[str, Any]) -> dict[str, Any]:
             raise ValueError(f"The trip must contain a non-empty '{key}' field.")
         trip[key] = str(trip[key]).strip()
 
+    ideas = trip.get("ideas", [])
+    if not isinstance(ideas, list):
+        raise ValueError("'ideas' must be a list when provided.")
+    for idea_index, idea in enumerate(ideas, start=1):
+        if not isinstance(idea, dict):
+            raise ValueError(f"Idea {idea_index} must be an object.")
+        for key in ("id", "title"):
+            if not str(idea.get(key, "")).strip():
+                raise ValueError(f"Idea {idea_index} must contain a non-empty '{key}' field.")
+            idea[key] = str(idea[key]).strip()
+        idea["status"] = str(idea.get("status", "maybe")).strip() or "maybe"
+        idea["priority"] = str(idea.get("priority", "medium")).strip() or "medium"
+        idea["notes"] = str(idea.get("notes", "")).strip()
+        for key in ("tags", "related_stops"):
+            values = idea.get(key, [])
+            if not isinstance(values, list):
+                raise ValueError(f"Idea {idea_index} has invalid '{key}'; use a list.")
+            idea[key] = [str(value).strip() for value in values if str(value).strip()]
+    trip["ideas"] = ideas
+
     itineraries = trip.get("itineraries")
     if not isinstance(itineraries, list) or not itineraries:
         raise ValueError("'itineraries' must contain at least one itinerary version.")
@@ -542,7 +562,9 @@ HTML_TEMPLATE = """<!doctype html>
     }
 
     #app.view-timeline #map,
-    #app.view-timeline .panel {
+    #app.view-timeline .panel,
+    #app.view-ideas #map,
+    #app.view-ideas .panel {
       visibility: hidden;
       pointer-events: none;
     }
@@ -614,7 +636,8 @@ HTML_TEMPLATE = """<!doctype html>
     }
 
     .version-button,
-    .view-button {
+    .view-button,
+    .idea-button {
       min-height: 34px;
       padding: 0 11px;
       border: 1px solid rgba(139, 151, 167, 0.72);
@@ -631,7 +654,9 @@ HTML_TEMPLATE = """<!doctype html>
     .version-button:hover,
     .version-button:focus,
     .view-button:hover,
-    .view-button:focus {
+    .view-button:focus,
+    .idea-button:hover,
+    .idea-button:focus {
       border-color: rgba(0, 122, 120, 0.7);
       outline: none;
     }
@@ -641,6 +666,18 @@ HTML_TEMPLATE = """<!doctype html>
       color: #ffffff;
       border-color: var(--accent);
       background: var(--accent);
+    }
+
+    .idea-button.is-primary {
+      color: #ffffff;
+      border-color: var(--accent);
+      background: var(--accent);
+    }
+
+    .idea-button.is-danger {
+      color: #8b2d16;
+      border-color: rgba(164, 72, 29, 0.35);
+      background: #fff7f4;
     }
 
     .stats {
@@ -971,7 +1008,8 @@ HTML_TEMPLATE = """<!doctype html>
       line-height: 1.4;
     }
 
-    .timeline-view {
+    .timeline-view,
+    .ideas-view {
       position: absolute;
       inset: 0;
       z-index: 450;
@@ -985,7 +1023,12 @@ HTML_TEMPLATE = """<!doctype html>
       display: block;
     }
 
-    .timeline-shell {
+    #app.view-ideas .ideas-view {
+      display: block;
+    }
+
+    .timeline-shell,
+    .ideas-shell {
       max-width: 1180px;
       min-height: calc(100vh - 122px);
       padding: 26px;
@@ -995,7 +1038,8 @@ HTML_TEMPLATE = """<!doctype html>
       box-shadow: var(--shadow);
     }
 
-    .timeline-header {
+    .timeline-header,
+    .ideas-header {
       display: grid;
       grid-template-columns: minmax(0, 1fr) minmax(250px, auto);
       gap: 18px;
@@ -1003,13 +1047,15 @@ HTML_TEMPLATE = """<!doctype html>
       margin-bottom: 22px;
     }
 
-    .timeline-header h2 {
+    .timeline-header h2,
+    .ideas-header h2 {
       margin: 0;
       font-size: 1.55rem;
       line-height: 1.1;
     }
 
-    .timeline-header p {
+    .timeline-header p,
+    .ideas-header p {
       margin: 7px 0 0;
       color: var(--muted);
       line-height: 1.4;
@@ -1038,6 +1084,198 @@ HTML_TEMPLATE = """<!doctype html>
       font-weight: 700;
     }
 
+    .ideas-counts {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: end;
+    }
+
+    .ideas-count {
+      min-width: 96px;
+      padding: 9px 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #f7f9fb;
+    }
+
+    .ideas-count span,
+    .idea-field label {
+      display: block;
+      color: var(--muted);
+      font-size: 0.72rem;
+      font-weight: 800;
+      letter-spacing: 0;
+      text-transform: uppercase;
+    }
+
+    .ideas-count strong {
+      display: block;
+      margin-top: 5px;
+      font-size: 1rem;
+    }
+
+    .ideas-layout {
+      display: grid;
+      grid-template-columns: minmax(270px, 340px) minmax(0, 1fr);
+      gap: 22px;
+      align-items: start;
+    }
+
+    .idea-form,
+    .ideas-save-prompt {
+      display: grid;
+      gap: 12px;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #ffffff;
+    }
+
+    .ideas-save-prompt {
+      margin-top: 14px;
+      border-color: rgba(0, 122, 120, 0.28);
+      background: #edf8f6;
+    }
+
+    .ideas-save-prompt[hidden] {
+      display: none;
+    }
+
+    .idea-field {
+      display: grid;
+      gap: 6px;
+    }
+
+    .idea-field input,
+    .idea-field select,
+    .idea-field textarea,
+    .ideas-save-prompt textarea {
+      width: 100%;
+      border: 1px solid rgba(139, 151, 167, 0.72);
+      border-radius: 8px;
+      color: var(--ink);
+      background: #ffffff;
+      font: inherit;
+      font-size: 0.9rem;
+    }
+
+    .idea-field input,
+    .idea-field select {
+      min-height: 38px;
+      padding: 0 10px;
+    }
+
+    .idea-field textarea,
+    .ideas-save-prompt textarea {
+      min-height: 96px;
+      padding: 10px;
+      resize: vertical;
+      line-height: 1.35;
+    }
+
+    .ideas-save-prompt textarea {
+      min-height: 150px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.76rem;
+    }
+
+    .idea-form-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .idea-form-actions,
+    .idea-card-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .ideas-list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .ideas-empty {
+      padding: 16px;
+      border: 1px dashed rgba(139, 151, 167, 0.72);
+      border-radius: 8px;
+      color: var(--muted);
+      background: #ffffff;
+      font-weight: 700;
+    }
+
+    .idea-card {
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-left: 6px solid var(--idea-color, var(--accent));
+      border-radius: 8px;
+      background: #ffffff;
+    }
+
+    .idea-card-header {
+      display: flex;
+      gap: 10px;
+      align-items: start;
+      justify-content: space-between;
+    }
+
+    .idea-card h3 {
+      margin: 0;
+      font-size: 1rem;
+      line-height: 1.2;
+    }
+
+    .idea-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin: 9px 0 0;
+    }
+
+    .idea-pill {
+      display: inline-flex;
+      align-items: center;
+      min-height: 22px;
+      padding: 3px 7px;
+      border-radius: 999px;
+      color: #334155;
+      background: #edf1f5;
+      font-size: 0.72rem;
+      font-weight: 800;
+      line-height: 1.2;
+    }
+
+    .idea-pill.is-local {
+      color: #24515d;
+      background: #dff2ef;
+    }
+
+    .idea-notes {
+      margin: 10px 0 0;
+      color: var(--muted);
+      font-size: 0.86rem;
+      line-height: 1.4;
+      white-space: pre-wrap;
+    }
+
+    .idea-notes a {
+      color: var(--accent);
+      font-weight: 800;
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+
+    .idea-related {
+      margin: 9px 0 0;
+      color: var(--accent-2);
+      font-size: 0.8rem;
+      font-weight: 750;
+      line-height: 1.35;
+    }
+
     .timeline-track {
       position: relative;
       min-height: 420px;
@@ -1048,8 +1286,8 @@ HTML_TEMPLATE = """<!doctype html>
     .timeline-axis-layout {
       position: relative;
       display: grid;
-      grid-template-columns: 118px minmax(0, 1fr);
-      gap: 20px;
+      grid-template-columns: 96px minmax(0, 1fr);
+      gap: 16px;
       min-height: var(--timeline-height);
     }
 
@@ -1061,31 +1299,33 @@ HTML_TEMPLATE = """<!doctype html>
 
     .timeline-date-mark {
       position: absolute;
-      right: 14px;
+      right: 12px;
       transform: translateY(-50%);
-      color: transparent;
-      font-size: 0.78rem;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--muted);
+      font-size: 0.74rem;
       font-weight: 800;
       white-space: nowrap;
     }
 
-    .timeline-date-mark.has-label {
-      color: var(--muted);
+    .timeline-date-mark.is-sunday {
+      color: #b42318;
     }
 
     .timeline-date-mark::after {
-      content: "";
-      position: absolute;
-      top: 50%;
-      right: -17px;
-      width: 9px;
-      height: 2px;
-      background: #9caabd;
+      display: none;
     }
 
-    .timeline-date-mark.has-label::after {
-      width: 9px;
-      background: #9caabd;
+    .timeline-date-label {
+      min-width: 40px;
+      text-align: right;
+    }
+
+    .timeline-weekday-label {
+      min-width: 28px;
+      text-align: left;
     }
 
     .timeline-blocks {
@@ -1098,7 +1338,7 @@ HTML_TEMPLATE = """<!doctype html>
       left: 0;
       width: min(540px, 100%);
       min-height: 48px;
-      padding: 12px 14px;
+      padding: 12px 88px 12px 52px;
       border: 1px solid var(--line);
       border-left: 8px solid var(--stop-color);
       border-radius: 8px;
@@ -1110,7 +1350,7 @@ HTML_TEMPLATE = """<!doctype html>
     .timeline-dot {
       position: absolute;
       top: 12px;
-      left: -50px;
+      left: 14px;
       width: 30px;
       height: 30px;
       display: grid;
@@ -1124,18 +1364,21 @@ HTML_TEMPLATE = """<!doctype html>
       font-weight: 900;
     }
 
+    .timeline-duration {
+      position: absolute;
+      top: 14px;
+      right: 14px;
+      color: var(--accent-3);
+      font-size: 0.8rem;
+      font-weight: 850;
+      line-height: 1.15;
+      white-space: nowrap;
+    }
+
     .timeline-stop h3 {
       margin: 0;
       font-size: 0.96rem;
       line-height: 1.2;
-    }
-
-    .timeline-date {
-      margin: 7px 0 0;
-      color: var(--accent-3);
-      font-size: 0.82rem;
-      font-weight: 800;
-      line-height: 1.25;
     }
 
     .timeline-note {
@@ -1155,8 +1398,8 @@ HTML_TEMPLATE = """<!doctype html>
     }
 
     .timeline-view[data-scale="0"] .timeline-axis-layout {
-      grid-template-columns: 76px minmax(0, 1fr);
-      gap: 12px;
+      grid-template-columns: 72px minmax(0, 1fr);
+      gap: 10px;
     }
 
     .timeline-view[data-scale="0"] .timeline-axis {
@@ -1164,13 +1407,17 @@ HTML_TEMPLATE = """<!doctype html>
     }
 
     .timeline-view[data-scale="0"] .timeline-date-mark {
-      right: 8px;
-      font-size: 0.58rem;
+      right: 6px;
+      gap: 4px;
+      font-size: 0.56rem;
     }
 
-    .timeline-view[data-scale="0"] .timeline-date-mark::after {
-      right: -10px;
-      width: 5px;
+    .timeline-view[data-scale="0"] .timeline-date-label {
+      min-width: 30px;
+    }
+
+    .timeline-view[data-scale="0"] .timeline-weekday-label {
+      min-width: 20px;
     }
 
     .timeline-view[data-scale="0"] .timeline-stop {
@@ -1178,7 +1425,7 @@ HTML_TEMPLATE = """<!doctype html>
       align-items: center;
       width: min(760px, 100%);
       min-height: 16px;
-      padding: 0 6px;
+      padding: 0 58px 0 30px;
       border: 0;
       border-left: 4px solid var(--stop-color);
       border-radius: 3px;
@@ -1190,13 +1437,20 @@ HTML_TEMPLATE = """<!doctype html>
 
     .timeline-view[data-scale="0"] .timeline-dot {
       top: 50%;
-      left: -33px;
+      left: 6px;
       width: 18px;
       height: 18px;
       transform: translateY(-50%);
       border-width: 2px;
       box-shadow: none;
       font-size: 0.62rem;
+    }
+
+    .timeline-view[data-scale="0"] .timeline-duration {
+      top: 50%;
+      right: 6px;
+      transform: translateY(-50%);
+      font-size: 0.6rem;
     }
 
     .timeline-view[data-scale="0"] .timeline-summary {
@@ -1218,15 +1472,6 @@ HTML_TEMPLATE = """<!doctype html>
       white-space: nowrap;
     }
 
-    .timeline-summary-date {
-      margin-left: auto;
-      color: var(--accent-3);
-      font-size: 0.66rem;
-      font-weight: 800;
-      line-height: 1.15;
-      white-space: nowrap;
-    }
-
     .timeline-view[data-scale="0"] .timeline-summary .tag-icon {
       width: 14px;
       height: 14px;
@@ -1237,8 +1482,7 @@ HTML_TEMPLATE = """<!doctype html>
       height: 9px;
     }
 
-    .timeline-view[data-scale="0"] .timeline-stop > h3,
-    .timeline-view[data-scale="0"] .timeline-stop > .timeline-date {
+    .timeline-view[data-scale="0"] .timeline-stop > h3 {
       margin: 0;
       display: none;
     }
@@ -1295,15 +1539,19 @@ HTML_TEMPLATE = """<!doctype html>
         font-size: 0.78rem;
       }
 
-      .timeline-view {
+      .timeline-view,
+      .ideas-view {
         padding: 72px 12px 12px;
       }
 
-      .timeline-shell {
+      .timeline-shell,
+      .ideas-shell {
         padding: 16px;
       }
 
-      .timeline-header {
+      .timeline-header,
+      .ideas-header,
+      .ideas-layout {
         grid-template-columns: 1fr;
       }
 
@@ -1311,36 +1559,36 @@ HTML_TEMPLATE = """<!doctype html>
         justify-items: stretch;
       }
 
+      .ideas-counts {
+        justify-content: start;
+      }
+
+      .idea-form-grid {
+        grid-template-columns: 1fr;
+      }
+
       .timeline-axis-layout {
-        grid-template-columns: 82px minmax(0, 1fr);
-        gap: 14px;
-      }
-
-      .timeline-date-mark {
-        right: 10px;
-        font-size: 0.7rem;
-      }
-
-      .timeline-date-mark::after {
-        right: -13px;
-        width: 7px;
-      }
-
-      .timeline-dot {
-        left: -40px;
-      }
-
-      .timeline-view[data-scale="0"] .timeline-axis-layout {
-        grid-template-columns: 62px minmax(0, 1fr);
+        grid-template-columns: 78px minmax(0, 1fr);
         gap: 10px;
       }
 
-      .timeline-view[data-scale="0"] .timeline-dot {
-        left: -28px;
+      .timeline-date-mark {
+        right: 6px;
+        gap: 4px;
+        font-size: 0.62rem;
       }
 
-      .timeline-summary-date {
-        font-size: 0.6rem;
+      .timeline-dot {
+        left: 10px;
+      }
+
+      .timeline-view[data-scale="0"] .timeline-axis-layout {
+        grid-template-columns: 68px minmax(0, 1fr);
+        gap: 8px;
+      }
+
+      .timeline-view[data-scale="0"] .timeline-dot {
+        left: 5px;
       }
     }
   </style>
@@ -1398,9 +1646,81 @@ HTML_TEMPLATE = """<!doctype html>
         <div class="timeline-track" id="timelineTrack"></div>
       </div>
     </section>
+    <section class="ideas-view" id="ideasView" aria-label="Ideas view">
+      <div class="ideas-shell">
+        <header class="ideas-header">
+          <div>
+            <p class="eyebrow" id="ideasSupertitle">__TRIP_SUPERTITLE__</p>
+            <h2 id="ideasTitle">Bucket list</h2>
+            <p id="ideasSubtitle">__TRIP_TITLE__</p>
+          </div>
+          <div class="ideas-counts" aria-label="Idea totals">
+            <div class="ideas-count"><span>Trip file</span><strong id="seedIdeaCount">0</strong></div>
+            <div class="ideas-count"><span>Local</span><strong id="localIdeaCount">0</strong></div>
+          </div>
+        </header>
+        <div class="ideas-layout">
+          <div>
+            <form class="idea-form" id="ideaForm">
+              <div class="idea-field">
+                <label for="ideaTitleInput">Idea</label>
+                <input id="ideaTitleInput" type="text" maxlength="90" required>
+              </div>
+              <div class="idea-form-grid">
+                <div class="idea-field">
+                  <label for="ideaStatusInput">Status</label>
+                  <select id="ideaStatusInput">
+                    <option value="maybe">Maybe</option>
+                    <option value="shortlist">Shortlist</option>
+                    <option value="planned">Planned</option>
+                    <option value="skip">Skip</option>
+                  </select>
+                </div>
+                <div class="idea-field">
+                  <label for="ideaPriorityInput">Priority</label>
+                  <select id="ideaPriorityInput">
+                    <option value="medium">Medium</option>
+                    <option value="high">High</option>
+                    <option value="low">Low</option>
+                  </select>
+                </div>
+              </div>
+              <div class="idea-field">
+                <label for="ideaRelatedStopInput">Related stop</label>
+                <select id="ideaRelatedStopInput"></select>
+              </div>
+              <div class="idea-field">
+                <label for="ideaTagsInput">Tags</label>
+                <input id="ideaTagsInput" type="text" placeholder="tramping, sightseeing">
+              </div>
+              <div class="idea-field">
+                <label for="ideaNotesInput">Notes</label>
+                <textarea id="ideaNotesInput"></textarea>
+              </div>
+              <div class="idea-form-actions">
+                <button class="idea-button is-primary" type="submit">Save local idea</button>
+              </div>
+            </form>
+            <section class="ideas-save-prompt" id="ideasSavePrompt" hidden>
+              <p>
+                To make local ideas part of future generated HTML, copy this JSON into Codex and ask to merge it into the trip file under <code>ideas</code>, then rerun the generator.
+              </p>
+              <textarea id="ideasExportJSON" readonly></textarea>
+              <div class="idea-form-actions">
+                <button class="idea-button" id="copyIdeasButton" type="button">Copy JSON</button>
+              </div>
+            </section>
+          </div>
+          <section>
+            <div class="ideas-list" id="ideasList"></div>
+          </section>
+        </div>
+      </div>
+    </section>
     <nav class="view-switch" aria-label="View mode">
       <button class="view-button is-active" id="mapViewButton" type="button" aria-pressed="true">Map view</button>
       <button class="view-button" id="timelineViewButton" type="button" aria-pressed="false">Timeline view</button>
+      <button class="view-button" id="ideasViewButton" type="button" aria-pressed="false">Ideas</button>
     </nav>
   </div>
 
@@ -1467,6 +1787,7 @@ HTML_TEMPLATE = """<!doctype html>
       december: 11
     };
     const monthLabels = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const weekdayLabels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
     const map = L.map("map", {
       preferCanvas: true,
@@ -1509,11 +1830,14 @@ HTML_TEMPLATE = """<!doctype html>
     }).addTo(map);
 
     const itineraries = trip.itineraries;
+    const seedIdeas = Array.isArray(trip.ideas) ? trip.ideas : [];
+    const ideasStorageKey = `road-trip-ideas:${trip.source_file || trip.title}`;
     const routeCache = new Map();
     let activeItineraryIndex = 0;
     let activeRouteRun = 0;
     let activeBounds = L.latLngBounds([]);
     let markers = [];
+    let localIdeas = loadLocalIdeas();
 
     const app = document.getElementById("app");
     const panelSupertitle = document.getElementById("panelSupertitle");
@@ -1526,6 +1850,19 @@ HTML_TEMPLATE = """<!doctype html>
     const timelineTitle = document.getElementById("timelineTitle");
     const timelineSubtitle = document.getElementById("timelineSubtitle");
     const timelineItineraryName = document.getElementById("timelineItineraryName");
+    const seedIdeaCount = document.getElementById("seedIdeaCount");
+    const localIdeaCount = document.getElementById("localIdeaCount");
+    const ideasList = document.getElementById("ideasList");
+    const ideaForm = document.getElementById("ideaForm");
+    const ideaTitleInput = document.getElementById("ideaTitleInput");
+    const ideaStatusInput = document.getElementById("ideaStatusInput");
+    const ideaPriorityInput = document.getElementById("ideaPriorityInput");
+    const ideaRelatedStopInput = document.getElementById("ideaRelatedStopInput");
+    const ideaTagsInput = document.getElementById("ideaTagsInput");
+    const ideaNotesInput = document.getElementById("ideaNotesInput");
+    const ideasSavePrompt = document.getElementById("ideasSavePrompt");
+    const ideasExportJSON = document.getElementById("ideasExportJSON");
+    const copyIdeasButton = document.getElementById("copyIdeasButton");
     const exampleNotice = document.getElementById("exampleNotice");
     const timelineExampleNotice = document.getElementById("timelineExampleNotice");
     const timelineTrack = document.getElementById("timelineTrack");
@@ -1538,15 +1875,21 @@ HTML_TEMPLATE = """<!doctype html>
     const routeStatus = document.getElementById("routeStatus");
     const mapViewButton = document.getElementById("mapViewButton");
     const timelineViewButton = document.getElementById("timelineViewButton");
+    const ideasViewButton = document.getElementById("ideasViewButton");
 
     mapViewButton.addEventListener("click", () => setViewMode("map"));
     timelineViewButton.addEventListener("click", () => setViewMode("timeline"));
+    ideasViewButton.addEventListener("click", () => setViewMode("ideas"));
     timelineScale.addEventListener("input", () => renderTimeline(getActiveItinerary()));
+    ideaForm.addEventListener("submit", saveLocalIdea);
+    copyIdeasButton.addEventListener("click", copyIdeasExport);
     exampleNotice.hidden = !trip.using_example_itineraries;
     timelineExampleNotice.hidden = !trip.using_example_itineraries;
     window.addEventListener("load", () => refreshMapLayout());
     window.addEventListener("resize", () => map.invalidateSize({ animate: false }));
 
+    populateIdeaStopOptions();
+    renderIdeas();
     renderVersionTabs();
     renderActiveItinerary({ fitBounds: true });
     setViewMode("map");
@@ -1705,21 +2048,20 @@ HTML_TEMPLATE = """<!doctype html>
         (latest, item) => latest && latest > item.range.end ? latest : item.range.end,
         datedItems[0]?.range.end || null
       );
-      const boundaryDates = new Set();
-      datedItems.forEach((item) => {
-        boundaryDates.add(dateKey(item.range.start));
-        boundaryDates.add(dateKey(item.range.end));
-      });
       const timelineDays = timelineStart && timelineEnd ? Math.max(1, daysBetween(timelineStart, timelineEnd)) : 1;
       const timelineHeight = Math.max(scale.minHeight || 320, timelineDays * scale.pxPerDay);
       const marks = timelineStart && timelineEnd
         ? dateTicks(timelineStart, timelineEnd).map((date) => ({
           top: daysBetween(timelineStart, date) * scale.pxPerDay,
-          label: boundaryDates.has(dateKey(date)) ? formatAxisDate(date) : ""
+          dateLabel: formatAxisDate(date),
+          weekdayLabel: formatWeekday(date),
+          isSunday: date.getUTCDay() === 0
         }))
         : items.map((item, index) => ({
           top: index * scale.pxPerDay,
-          label: item.stop.date_range
+          dateLabel: "",
+          weekdayLabel: "",
+          isSunday: false
         }));
 
       timelineView.dataset.scale = String(scaleIndex);
@@ -1727,7 +2069,10 @@ HTML_TEMPLATE = """<!doctype html>
         <div class="timeline-axis-layout" style="--timeline-height: ${timelineHeight}px">
           <div class="timeline-axis">
             ${marks.map((mark) => `
-              <span class="timeline-date-mark${mark.label ? " has-label" : ""}" style="top: ${mark.top}px">${escapeHTML(mark.label)}</span>
+              <span class="timeline-date-mark${mark.isSunday ? " is-sunday" : ""}" style="top: ${mark.top}px">
+                <span class="timeline-date-label">${escapeHTML(mark.dateLabel)}</span>
+                <span class="timeline-weekday-label">${escapeHTML(mark.weekdayLabel)}</span>
+              </span>
             `).join("")}
           </div>
           <div class="timeline-blocks">
@@ -1737,16 +2082,16 @@ HTML_TEMPLATE = """<!doctype html>
                 : item.index * scale.pxPerDay;
               const height = Math.max(scale.pxPerDay, item.range.durationDays * scale.pxPerDay);
               const color = stopColor(item.stop);
+              const duration = formatDurationDays(item.range.durationDays);
               return `
               <article class="timeline-stop" style="--stop-color: ${color}; --stop-bg: ${colorWithAlpha(color, 0.16)}; top: ${top}px; height: ${height}px">
                 <span class="timeline-dot">${item.index + 1}</span>
+                <span class="timeline-duration">${escapeHTML(duration)}</span>
                 <div class="timeline-summary">
                   <span class="timeline-place">${escapeHTML(item.stop.name)}</span>
                   ${tagIconsHTML(item.stop)}
-                  <span class="timeline-summary-date">${escapeHTML(item.range.label || item.stop.date_range)}</span>
                 </div>
                 <h3>${escapeHTML(item.stop.name)}</h3>
-                <p class="timeline-date">${escapeHTML(item.range.label || item.stop.date_range)}</p>
                 ${tagHTML(item.stop)}
                 ${flightHTML(item.stop)}
                 ${meetupsHTML(item.stop)}
@@ -1758,15 +2103,218 @@ HTML_TEMPLATE = """<!doctype html>
       `;
     }
 
+    function populateIdeaStopOptions() {
+      const stopNames = [];
+      itineraries.forEach((itinerary) => {
+        (itinerary.stops || []).forEach((stop) => {
+          const name = String(stop.name || "").trim();
+          if (name && !stopNames.includes(name)) {
+            stopNames.push(name);
+          }
+        });
+      });
+
+      ideaRelatedStopInput.innerHTML = `
+        <option value="">None</option>
+        ${stopNames.map((name) => `<option value="${escapeHTML(name)}">${escapeHTML(name)}</option>`).join("")}
+      `;
+    }
+
+    function renderIdeas() {
+      const ideas = [
+        ...seedIdeas.map((idea) => normalizeIdea(idea, "trip")),
+        ...localIdeas.map((idea) => normalizeIdea(idea, "local"))
+      ];
+      seedIdeaCount.textContent = String(seedIdeas.length);
+      localIdeaCount.textContent = String(localIdeas.length);
+      refreshIdeasExport();
+
+      if (!ideas.length) {
+        ideasList.innerHTML = `<p class="ideas-empty">No ideas saved.</p>`;
+        return;
+      }
+
+      ideasList.innerHTML = ideas.map(ideaCardHTML).join("");
+      ideasList.querySelectorAll("[data-delete-idea]").forEach((button) => {
+        button.addEventListener("click", () => {
+          localIdeas = localIdeas.filter((idea) => idea.id !== button.dataset.deleteIdea);
+          storeLocalIdeas();
+          renderIdeas();
+        });
+      });
+    }
+
+    function ideaCardHTML(idea) {
+      const tags = idea.tags.length
+        ? `<p class="tag-list">${idea.tags.map((tag) => `
+          <span class="tag-pill" style="--tag-color: ${tagColor(tag)}">
+            ${tagIconHTML(tag)}
+            <span>${escapeHTML(normalizeTag(tag))}</span>
+          </span>
+        `).join("")}</p>`
+        : "";
+      const related = idea.related_stops.length
+        ? `<p class="idea-related">Stop: ${escapeHTML(idea.related_stops.join(", "))}</p>`
+        : "";
+      const notes = idea.notes
+        ? `<p class="idea-notes">${noteHTML(idea.notes)}</p>`
+        : "";
+      const deleteButton = idea.source === "local"
+        ? `<div class="idea-card-actions"><button class="idea-button is-danger" type="button" data-delete-idea="${escapeHTML(idea.id)}">Delete local</button></div>`
+        : "";
+
+      return `
+        <article class="idea-card" style="--idea-color: ${tagColor(idea.tags[0] || idea.status)}">
+          <div class="idea-card-header">
+            <h3>${escapeHTML(idea.title)}</h3>
+            <span class="idea-pill${idea.source === "local" ? " is-local" : ""}">${idea.source === "local" ? "Local" : "Trip file"}</span>
+          </div>
+          <div class="idea-meta">
+            <span class="idea-pill">${escapeHTML(idea.status)}</span>
+            <span class="idea-pill">${escapeHTML(idea.priority)}</span>
+          </div>
+          ${related}
+          ${tags}
+          ${notes}
+          ${deleteButton}
+        </article>
+      `;
+    }
+
+    function saveLocalIdea(event) {
+      event.preventDefault();
+      const title = ideaTitleInput.value.trim();
+      if (!title) {
+        return;
+      }
+
+      const relatedStop = ideaRelatedStopInput.value.trim();
+      const idea = {
+        id: `${slugify(title)}-${Date.now().toString(36)}`,
+        title,
+        status: ideaStatusInput.value,
+        priority: ideaPriorityInput.value,
+        related_stops: relatedStop ? [relatedStop] : [],
+        tags: splitIdeaTags(ideaTagsInput.value),
+        notes: ideaNotesInput.value.trim()
+      };
+
+      localIdeas = [...localIdeas, idea];
+      storeLocalIdeas();
+      ideaForm.reset();
+      ideaStatusInput.value = "maybe";
+      ideaPriorityInput.value = "medium";
+      ideasSavePrompt.hidden = false;
+      renderIdeas();
+    }
+
+    function splitIdeaTags(value) {
+      return [...new Set(String(value || "")
+        .split(",")
+        .map((tag) => tag.trim())
+        .filter(Boolean))];
+    }
+
+    function normalizeIdea(idea, source) {
+      return {
+        id: String(idea.id || "").trim(),
+        title: String(idea.title || "").trim(),
+        status: String(idea.status || "maybe").trim() || "maybe",
+        priority: String(idea.priority || "medium").trim() || "medium",
+        related_stops: Array.isArray(idea.related_stops)
+          ? idea.related_stops.map((stop) => String(stop).trim()).filter(Boolean)
+          : [],
+        tags: Array.isArray(idea.tags)
+          ? idea.tags.map((tag) => String(tag).trim()).filter(Boolean)
+          : [],
+        notes: String(idea.notes || "").trim(),
+        source
+      };
+    }
+
+    function loadLocalIdeas() {
+      try {
+        const stored = JSON.parse(localStorage.getItem(ideasStorageKey) || "[]");
+        return Array.isArray(stored)
+          ? stored.map((idea) => normalizeIdea(idea, "local")).filter((idea) => idea.id && idea.title)
+          : [];
+      } catch (error) {
+        console.warn("Local ideas could not be loaded", error);
+        return [];
+      }
+    }
+
+    function storeLocalIdeas() {
+      try {
+        localStorage.setItem(ideasStorageKey, JSON.stringify(localIdeas.map(serializableIdea)));
+      } catch (error) {
+        console.warn("Local ideas could not be saved", error);
+      }
+    }
+
+    function refreshIdeasExport() {
+      ideasSavePrompt.hidden = localIdeas.length === 0;
+      ideasExportJSON.value = JSON.stringify({
+        ideas: localIdeas.map(serializableIdea)
+      }, null, 2);
+    }
+
+    function serializableIdea(idea) {
+      return {
+        id: idea.id,
+        title: idea.title,
+        status: idea.status,
+        priority: idea.priority,
+        related_stops: idea.related_stops,
+        tags: idea.tags,
+        notes: idea.notes
+      };
+    }
+
+    function copyIdeasExport() {
+      const text = ideasExportJSON.value;
+      if (navigator.clipboard?.writeText) {
+        navigator.clipboard.writeText(text)
+          .then(() => showCopiedState())
+          .catch(selectIdeasExport);
+        return;
+      }
+      selectIdeasExport();
+    }
+
+    function showCopiedState() {
+      copyIdeasButton.textContent = "Copied";
+      window.setTimeout(() => {
+        copyIdeasButton.textContent = "Copy JSON";
+      }, 1400);
+    }
+
+    function selectIdeasExport() {
+      ideasExportJSON.focus();
+      ideasExportJSON.select();
+    }
+
+    function slugify(value) {
+      return String(value || "")
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "") || "idea";
+    }
+
     function setViewMode(mode) {
       const showTimeline = mode === "timeline";
-      app.classList.toggle("view-map", !showTimeline);
+      const showIdeas = mode === "ideas";
+      app.classList.toggle("view-map", !showTimeline && !showIdeas);
       app.classList.toggle("view-timeline", showTimeline);
-      mapViewButton.classList.toggle("is-active", !showTimeline);
+      app.classList.toggle("view-ideas", showIdeas);
+      mapViewButton.classList.toggle("is-active", !showTimeline && !showIdeas);
       timelineViewButton.classList.toggle("is-active", showTimeline);
-      mapViewButton.setAttribute("aria-pressed", String(!showTimeline));
+      ideasViewButton.classList.toggle("is-active", showIdeas);
+      mapViewButton.setAttribute("aria-pressed", String(!showTimeline && !showIdeas));
       timelineViewButton.setAttribute("aria-pressed", String(showTimeline));
-      if (!showTimeline) {
+      ideasViewButton.setAttribute("aria-pressed", String(showIdeas));
+      if (!showTimeline && !showIdeas) {
         requestAnimationFrame(() => refreshMapLayout());
       }
     }
@@ -2202,12 +2750,17 @@ HTML_TEMPLATE = """<!doctype html>
       return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() + days));
     }
 
-    function dateKey(date) {
-      return date.toISOString().slice(0, 10);
-    }
-
     function formatAxisDate(date) {
       return `${monthLabels[date.getUTCMonth()]} ${String(date.getUTCDate()).padStart(2, "0")}`;
+    }
+
+    function formatWeekday(date) {
+      return weekdayLabels[date.getUTCDay()] || "";
+    }
+
+    function formatDurationDays(days) {
+      const dayCount = Math.max(1, Number(days) || 1);
+      return `${dayCount} day${dayCount === 1 ? "" : "s"}`;
     }
 
     function stopMeetups(stop) {
@@ -2252,6 +2805,31 @@ HTML_TEMPLATE = """<!doctype html>
         return `${hours.toFixed(1)} h`;
       }
       return `${Math.round(hours).toLocaleString()} h`;
+    }
+
+    function noteHTML(value) {
+      const text = String(value ?? "").replace(/<br\\s*\\/?>/gi, "\\n");
+      return text
+        .split(/((?:https?:\\/\\/|www\\.)[^\\s<>"']+)/gi)
+        .map((part) => {
+          if (!/^(?:https?:\\/\\/|www\\.)/i.test(part)) {
+            return escapeHTML(part);
+          }
+
+          let urlText = part;
+          let suffix = "";
+          while (/[.,;:!?)]$/.test(urlText)) {
+            suffix = urlText.slice(-1) + suffix;
+            urlText = urlText.slice(0, -1);
+          }
+          if (!urlText) {
+            return escapeHTML(part);
+          }
+
+          const href = /^www\\./i.test(urlText) ? `https://${urlText}` : urlText;
+          return `<a href="${escapeHTML(href)}" target="_blank" rel="noopener noreferrer">${escapeHTML(urlText)}</a>${escapeHTML(suffix)}`;
+        })
+        .join("");
     }
 
     function escapeHTML(value) {

@@ -37,6 +37,7 @@ Trip-level labels live at the top of the file:
   "supertitle": "Road trip",
   "title": "NZ 2027",
   "subtitle": "Family Trip, January-March 2027",
+  "ideas": [],
   "itineraries": []
 }
 ```
@@ -75,6 +76,22 @@ Each stop supports:
 `route_note` describes the route from that stop to the next stop.
 `meetups` is optional and can contain zero, one, or multiple names.
 `tags` is required and must contain one or multiple activity types. The first tag controls the stop and route color; every tag gets an icon in the map marker and compact timeline. Useful examples include `friends`, `tramping`, `sightseeing`, `camping`, `luxury-bach`, and `travel`.
+
+Top-level `ideas` seed the Ideas tab:
+
+```json
+{
+  "id": "abel-tasman-boat-in-out",
+  "title": "Boat in and out Abel Tasman",
+  "status": "maybe",
+  "priority": "medium",
+  "related_stops": ["Nelson / Abel Tasman"],
+  "tags": ["sightseeing", "tramping"],
+  "notes": "Check water taxi options."
+}
+```
+
+Ideas added inside the generated HTML are saved in that browser's `localStorage`. The Ideas tab shows JSON you can copy into Codex to merge those local ideas back into the trip file before regenerating the HTML.
 
 Flight segments can be shown as dashed lines by adding flight metadata to the stop that starts the segment:
 

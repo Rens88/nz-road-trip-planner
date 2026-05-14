@@ -13,6 +13,34 @@
     "url": "https://router.project-osrm.org/route/v1",
     "profile": "driving"
   },
+  "ideas": [
+    {
+      "id": "abel-tasman-kayak",
+      "title": "Kayak or water taxi in Abel Tasman",
+      "status": "maybe",
+      "priority": "medium",
+      "related_stops": [
+        "Nelson / Abel Tasman"
+      ],
+      "tags": [
+        "sightseeing"
+      ],
+      "notes": "Compare time, weather, and kid-friendly options."
+    },
+    {
+      "id": "tongariro-weather-window",
+      "title": "Keep a weather window for Tongariro",
+      "status": "shortlist",
+      "priority": "high",
+      "related_stops": [
+        "Tongariro National Park"
+      ],
+      "tags": [
+        "tramping"
+      ],
+      "notes": ""
+    }
+  ],
   "itineraries": [
     {
       "id": "north-to-south",
